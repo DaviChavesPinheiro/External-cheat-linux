@@ -1,6 +1,7 @@
 #include <iostream>
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <fstream>
 
 using namespace std;
@@ -58,6 +59,31 @@ int findHeapAddress(long pid, unsigned long* heap_s, unsigned long* heap_e) {
   return -1;
 }
 
+unsigned long scanInt(long pid, unsigned long heap_s, unsigned long heap_e, int number) {
+  struct iovec local[1];
+  struct iovec remote[1];
+  char buf[4];
+  ssize_t nread;
+
+  local[0].iov_base = buf;
+  local[0].iov_len = 4;
+  remote[0].iov_base = (void*) heap_s;
+  remote[0].iov_len = 4;
+  
+  unsigned long scan_area = 0;
+
+  while(heap_e - heap_s >= scan_area) {
+    remote[0].iov_base = (void*)(heap_s + scan_area);
+    nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+    if(nread != 4) return 0;
+    
+    // Achamos o int
+    if(*((int*)buf) == number) return (unsigned long)remote[0].iov_base;
+
+    scan_area++;
+  }
+  return 0;
+}
 
 int main (int argc, char *argv[])
 {
@@ -83,5 +109,15 @@ int main (int argc, char *argv[])
   }
   printf("[Info]: Heap: 0x%lx - 0x%lx\n", heap_s, heap_e);
   printf("[Info]: Heap: %lu bytes\n", heap_e - heap_s);
+
+  // Find addr from number
+  unsigned long addr = scanInt(pid, heap_s, heap_e, 0x11223344);
+  if(addr == 0) {
+    printf("([Error]: Endereco não encontrado)\n");
+    return 1;
+  }
+
+  printf("[Info]: Scan: 0x%lx\n", addr);
+
   return 0;
 }
