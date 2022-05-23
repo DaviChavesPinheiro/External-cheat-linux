@@ -85,6 +85,20 @@ unsigned long scanInt(long pid, unsigned long heap_s, unsigned long heap_e, int 
   return 0;
 }
 
+int putInt(long pid, unsigned long addr, int number) {
+  struct iovec local[1];
+  struct iovec remote[1];
+  ssize_t nread;
+
+  local[0].iov_base = &number;
+  local[0].iov_len = 4;
+  remote[0].iov_base = (void*) addr;
+  remote[0].iov_len = 4;
+  
+  nread = process_vm_writev(pid, local, 1, remote, 1, 0);
+  return nread == 4 ? 1 : -1;
+}
+
 int main (int argc, char *argv[])
 {
   if(argc < 2) {
@@ -118,6 +132,15 @@ int main (int argc, char *argv[])
   }
 
   printf("[Info]: Scan: 0x%lx\n", addr);
+  
+  // Write on memory
+  unsigned long res = putInt(pid, addr, 0x12345678);
+  if(res == -1) {
+    printf("([Error]: Erro ao tentar escrever na memória\n");
+    return 1;
+  }
+
+  printf("[Info]: Escrita realizada com sucesso!\n");
 
   return 0;
 }
