@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/uio.h>
@@ -59,50 +60,50 @@ int findHeapAddress(long pid, unsigned long* heap_s, unsigned long* heap_e) {
   return -1;
 }
 
-unsigned long scanInt(long pid, unsigned long heap_s, unsigned long heap_e, int number) {
+unsigned long scanBytes(long pid, unsigned long heap_s, unsigned long heap_e, char *bytes, int bytes_n) {
   struct iovec local[1];
   struct iovec remote[1];
-  char buf[4];
+  char buf[bytes_n];
   ssize_t nread;
 
   local[0].iov_base = buf;
-  local[0].iov_len = 4;
+  local[0].iov_len = bytes_n;
   remote[0].iov_base = (void*) heap_s;
-  remote[0].iov_len = 4;
+  remote[0].iov_len = bytes_n;
   
   unsigned long scan_area = 0;
 
   while(heap_e - heap_s >= scan_area) {
     remote[0].iov_base = (void*)(heap_s + scan_area);
     nread = process_vm_readv(pid, local, 1, remote, 1, 0);
-    if(nread != 4) return 0;
+    if(nread != bytes_n) return 0;
     
-    // Achamos o int
-    if(*((int*)buf) == number) return (unsigned long)remote[0].iov_base;
+    // Match
+    if(memcmp(buf, bytes, bytes_n) == 0) return (unsigned long)remote[0].iov_base;
 
     scan_area++;
   }
   return 0;
 }
 
-int putInt(long pid, unsigned long addr, int number) {
+int putBytes(long pid, unsigned long addr, char *bytes, int bytes_n) {
   struct iovec local[1];
   struct iovec remote[1];
   ssize_t nread;
 
-  local[0].iov_base = &number;
-  local[0].iov_len = 4;
+  local[0].iov_base = bytes;
+  local[0].iov_len = bytes_n;
   remote[0].iov_base = (void*) addr;
-  remote[0].iov_len = 4;
+  remote[0].iov_len = bytes_n;
   
   nread = process_vm_writev(pid, local, 1, remote, 1, 0);
-  return nread == 4 ? 1 : -1;
+  return nread == bytes_n ? 1 : -1;
 }
 
 int main (int argc, char *argv[])
 {
   if(argc < 2) {
-    cout << "[Error]: Parâmetros inválidos!" << endl;
+    cout << "[Error]: Invalid parameters" << endl;
     return 1;
   }
 
@@ -113,7 +114,7 @@ int main (int argc, char *argv[])
     return 1;
   }
 
-  cout << "[Info]: Processo encontrado (" << pid << ")" << endl;
+  cout << "[Info]: Process found (" << pid << ")" << endl;
 
   // Find heap start address
   unsigned long heap_s = -1, heap_e = -1;
@@ -124,23 +125,26 @@ int main (int argc, char *argv[])
   printf("[Info]: Heap: 0x%lx - 0x%lx\n", heap_s, heap_e);
   printf("[Info]: Heap: %lu bytes\n", heap_e - heap_s);
 
-  // Find addr from number
-  unsigned long addr = scanInt(pid, heap_s, heap_e, 0x11223344);
+  // Find addr from array of bytes
+  char bytes_r[4] = {0x44, 0x33, 0x22, 0x11};
+
+  unsigned long addr = scanBytes(pid, heap_s, heap_e, bytes_r, sizeof(bytes_r));
   if(addr == 0) {
-    printf("([Error]: Endereco não encontrado)\n");
+    printf("[Error]: Address no found\n");
     return 1;
   }
 
   printf("[Info]: Scan: 0x%lx\n", addr);
-  
+
   // Write on memory
-  unsigned long res = putInt(pid, addr, 0x12345678);
+  char bytes_w[4] = {0x78, 0x56, 0x34, 0x12};
+  unsigned long res = putBytes(pid, addr, bytes_w, sizeof(bytes_w));
   if(res == -1) {
-    printf("([Error]: Erro ao tentar escrever na memória\n");
+    printf("[Error]: Error writing to memory\n");
     return 1;
   }
 
-  printf("[Info]: Escrita realizada com sucesso!\n");
+  printf("[Info]: Writing done successfully!\n");
 
   return 0;
 }
