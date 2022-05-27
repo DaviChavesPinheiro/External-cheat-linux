@@ -40,7 +40,6 @@ long findPidByName(string proc_name) {
 }
 
 int findHeapAddress(long pid, unsigned long* heap_s, unsigned long* heap_e) {
-  
   // Gets maps file path
   char maps_path[64];
   sprintf(maps_path, "/proc/%ld/maps", pid);
@@ -53,6 +52,26 @@ int findHeapAddress(long pid, unsigned long* heap_s, unsigned long* heap_e) {
     if(line.find("[heap]") != line.npos) {
       *heap_s = std::stoul(line.substr(0, 12), NULL, 16);
       *heap_e = std::stoul(line.substr(13, 12), NULL, 16);
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+int findStackAddress(long pid, unsigned long* stack_s, unsigned long* stack_e) {
+  // Gets maps file path
+  char maps_path[64];
+  sprintf(maps_path, "/proc/%ld/maps", pid);
+
+  // Read the file
+  ifstream maps(maps_path);
+  string line;
+
+  while(std::getline(maps, line)) {
+    if(line.find("[stack]") != line.npos) {
+      *stack_s = std::stoul(line.substr(0, 12), NULL, 16);
+      *stack_e = std::stoul(line.substr(13, 12), NULL, 16);
       return 0;
     }
   }
@@ -116,21 +135,32 @@ int main (int argc, char *argv[])
 
   cout << "[Info]: Process found (" << pid << ")" << endl;
 
-  // Find heap start address
-  unsigned long heap_s = -1, heap_e = -1;
-  if (findHeapAddress(pid, &heap_s, &heap_e) == -1) {
-    cout << "[Error]: Heap address not found" << endl;
+  // Find heap range address
+  // unsigned long heap_s = -1, heap_e = -1;
+  // if (findHeapAddress(pid, &heap_s, &heap_e) == -1) {
+  //   cout << "[Error]: Heap address not found" << endl;
+  //   return 1;
+  // }
+  // printf("[Info]: Heap: 0x%lx - 0x%lx\n", heap_s, heap_e);
+  // printf("[Info]: Heap: %lu bytes\n", heap_e - heap_s);
+
+  // Find stack range address
+  unsigned long stack_s = -1, stack_e = -1;
+  if (findStackAddress(pid, &stack_s, &stack_e) == -1) {
+    cout << "[Error]: Stack address not found" << endl;
     return 1;
   }
-  printf("[Info]: Heap: 0x%lx - 0x%lx\n", heap_s, heap_e);
-  printf("[Info]: Heap: %lu bytes\n", heap_e - heap_s);
+  printf("[Info]: Stack: 0x%lx - 0x%lx\n", stack_s, stack_e);
+  printf("[Info]: Stack: %lu bytes\n", stack_e - stack_s);
 
   // Find addr from array of bytes
   char bytes_r[4] = {0x44, 0x33, 0x22, 0x11};
 
-  unsigned long addr = scanBytes(pid, heap_s, heap_e, bytes_r, sizeof(bytes_r));
+  // unsigned long addr = scanBytes(pid, heap_s, heap_e, bytes_r, sizeof(bytes_r)); // heap
+  unsigned long addr = scanBytes(pid, stack_s, stack_e, bytes_r, sizeof(bytes_r)); // stack
+
   if(addr == 0) {
-    printf("[Error]: Address no found\n");
+    printf("[Error]: Address not found\n");
     return 1;
   }
 
